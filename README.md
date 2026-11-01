@@ -1,6 +1,6 @@
 # Cyber-Security Agent
 
-## A Code Analyzer via Semgrep MCP server for Azure and GCP
+## A Code Analyzer via Semgrep MCP server for GCP
 
 ![Course Image](assets/cyber.png)
 
