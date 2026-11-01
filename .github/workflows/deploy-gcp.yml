@@ -47,8 +47,14 @@ jobs:
       - name: Terraform apply
         run: terraform apply -input=false -auto-approve
 
-      - name: Check the app is healthy
+      - name: Print the deployed URL
+        id: url
         run: |
           SERVICE_URL="$(terraform output -raw service_url)"
-          curl --fail --silent --show-error --retry 5 --retry-delay 10 --retry-all-errors "$SERVICE_URL/health"
+          echo "service_url=$SERVICE_URL" >> "$GITHUB_OUTPUT"
+          echo "Cloud Run URL: $SERVICE_URL"
+          echo "::notice title=Cloud Run URL::$SERVICE_URL"
           echo "Deployed to $SERVICE_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check the app is healthy
+        run: curl --fail --silent --show-error --retry 5 --retry-delay 10 --retry-all-errors "${{ steps.url.outputs.service_url }}/health"
