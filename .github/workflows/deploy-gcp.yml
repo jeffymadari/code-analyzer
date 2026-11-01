@@ -1,0 +1,54 @@
+name: Deploy to GCP
+
+# Runs only when started by hand from the Actions tab
+on:
+  workflow_dispatch:
+
+# Deploy and destroy share one Terraform state, so never run them together
+concurrency:
+  group: gcp-terraform
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+  TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+  TF_VAR_semgrep_app_token: ${{ secrets.SEMGREP_APP_TOKEN }}
+  # A unique tag per commit, so Cloud Run picks up the new image
+  TF_VAR_docker_image_tag: ${{ github.sha }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/gcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: github-deploy@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          # The wrapper adds extra text to terraform output, which breaks the URL below
+          terraform_wrapper: false
+
+      - name: Terraform init
+        run: terraform init -input=false -backend-config="bucket=${{ vars.GCP_PROJECT_ID }}-tfstate"
+
+      - name: Terraform apply
+        run: terraform apply -input=false -auto-approve
+
+      - name: Check the app is healthy
+        run: |
+          SERVICE_URL="$(terraform output -raw service_url)"
+          curl --fail --silent --show-error --retry 5 --retry-delay 10 --retry-all-errors "$SERVICE_URL/health"
+          echo "Deployed to $SERVICE_URL" >> "$GITHUB_STEP_SUMMARY"

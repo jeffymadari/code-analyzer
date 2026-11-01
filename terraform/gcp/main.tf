@@ -1,6 +1,12 @@
 terraform {
   required_version = ">= 1.0"
 
+  # State lives in GCS so the deploy and destroy workflows share it.
+  # The bucket is passed in: terraform init -backend-config="bucket=<project-id>-tfstate"
+  backend "gcs" {
+    prefix = "terraform/gcp"
+  }
+
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -75,7 +81,11 @@ resource "docker_image" "app" {
 # Push Docker image to Artifact Registry
 resource "docker_registry_image" "app" {
   name = docker_image.app.name
-  
+
+  # Keep the previous image until Cloud Run has moved to the new one, otherwise
+  # a failed deploy leaves the running revision with no image to start from
+  keep_remotely = true
+
   depends_on = [
     google_artifact_registry_repository.app,
     docker_image.app
